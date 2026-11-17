@@ -1,0 +1,6 @@
+{
+  "name": "Crème & Crumb POS",
+  "description": "Mobile-first cake shop billing software with cake catalog management and Bluetooth ESC/POS thermal receipt printing.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="112" fill="#18181B" />
+  <!-- Cake stand base -->
+  <path d="M168 386H344" stroke="#F8FAFC" stroke-width="22" stroke-linecap="round" />
+  <path d="M256 340V386" stroke="#F8FAFC" stroke-width="22" stroke-linecap="round" />
+  <path d="M124 340H388" stroke="#F8FAFC" stroke-width="22" stroke-linecap="round" />
+  <!-- Bottom cake tier -->
+  <rect x="148" y="246" width="216" height="90" rx="18" fill="#F8FAFC" />
+  <!-- Top frosting drip tier -->
+  <path
+    d="M148 214C148 197.431 161.431 184 178 184H334C350.569 184 364 197.431 364 214V250C364 261.046 355.046 270 344 270C332.954 270 324 261.046 324 250V244C324 238.477 319.523 234 314 234C308.477 234 304 238.477 304 244V262C304 273.046 295.046 282 284 282C272.954 282 264 273.046 264 262V244C264 238.477 259.523 234 254 234C248.477 234 244 238.477 244 244V256C244 267.046 235.046 276 224 276C212.954 276 204 267.046 204 256V244C204 238.477 199.523 234 194 234C188.477 234 184 238.477 184 244V250C184 261.046 175.046 270 164 270C155.163 270 148 262.837 148 254V214Z"
+    fill="#D97706"
+  />
+  <!-- Berry / candle crown -->
+  <circle cx="256" cy="146" r="24" fill="#F59E0B" />
+  <circle cx="206" cy="156" r="16" fill="#FDE68A" />
+  <circle cx="306" cy="156" r="16" fill="#FDE68A" />
+</svg>
