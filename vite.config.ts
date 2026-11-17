@@ -15,11 +15,11 @@ export default defineConfig(() => {
         includeAssets: ['apple-touch-icon.png', 'icon.svg'],
         manifest: {
           id: '/',
-          name: 'Crème & Crumb POS',
-          short_name: 'Crème POS',
+          name: 'Esai Cakes POS',
+          short_name: 'Esai POS',
           description:
-            'Mobile-first cake shop billing software with cake catalog management and Bluetooth ESC/POS thermal receipt printing.',
-          theme_color: '#18181b',
+            'Esai Cakes billing software — cake catalog management and Bluetooth ESC/POS thermal receipt printing.',
+          theme_color: '#7c3aed',
           background_color: '#f8fafc',
           display: 'standalone',
           orientation: 'portrait-primary',

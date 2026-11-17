@@ -1,16 +1,28 @@
 export type CakeCategory =
-  | 'Layer Cakes'
+  | 'Special Cakes'
+  | 'Trending Cakes'
+  | 'Chocolate Cakes'
+  | 'Fruit Flavors'
+  | 'Premium Cakes'
   | 'Cheesecakes'
-  | 'Fruit & Cream'
-  | 'Pastries'
-  | 'Custom Orders';
+  | 'Birthday Girl'
+  | 'Birthday Boy'
+  | 'Wedding Cakes'
+  | 'Special Occasion'
+  | 'Brownies & Cupcakes';
 
 export const CAKE_CATEGORIES: CakeCategory[] = [
-  'Layer Cakes',
+  'Special Cakes',
+  'Trending Cakes',
+  'Chocolate Cakes',
+  'Fruit Flavors',
+  'Premium Cakes',
   'Cheesecakes',
-  'Fruit & Cream',
-  'Pastries',
-  'Custom Orders',
+  'Birthday Girl',
+  'Birthday Boy',
+  'Wedding Cakes',
+  'Special Occasion',
+  'Brownies & Cupcakes',
 ];
 
 export interface CakeVariant {

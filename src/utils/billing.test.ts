@@ -89,7 +89,7 @@ test('generateBillNumber increments sequential numbers for the same date', () =>
 test('validateCakeForm rejects empty names, missing SKUs, and invalid variant prices', () => {
   const invalidEmpty = validateCakeForm({
     name: '   ',
-    category: 'Layer Cakes',
+    category: 'Special Cakes',
     sku: '',
     description: '',
     egglessAvailable: true,
@@ -103,7 +103,7 @@ test('validateCakeForm rejects empty names, missing SKUs, and invalid variant pr
 
   const valid = validateCakeForm({
     name: 'Pistachio Rose Gateau',
-    category: 'Layer Cakes',
+    category: 'Special Cakes',
     sku: 'PRG-07',
     description: 'Iranian pistachio sponge with rosewater cream',
     egglessAvailable: true,
@@ -123,7 +123,7 @@ test('filterCakes filters by category, search query, and stock availability', ()
     {
       id: '1',
       name: 'Belgian Chocolate Truffle',
-      category: 'Layer Cakes',
+      category: 'Special Cakes',
       description: 'Dark ganache',
       egglessAvailable: true,
       inStock: true,

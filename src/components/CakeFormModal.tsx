@@ -19,7 +19,7 @@ export function CakeFormModal({
 }: CakeFormModalProps) {
   const [name, setName] = useState(initialCake?.name ?? '');
   const [category, setCategory] = useState<CakeCategory>(
-    initialCake?.category ?? 'Layer Cakes',
+    initialCake?.category ?? 'Special Cakes',
   );
   const [sku, setSku] = useState(initialCake?.sku ?? '');
   const [description, setDescription] = useState(initialCake?.description ?? '');
