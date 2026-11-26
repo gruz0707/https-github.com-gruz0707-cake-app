@@ -14,8 +14,12 @@ const sampleCart: CartItem[] = [
     key: 'c1-v1-egg',
     cakeId: 'c1',
     cakeName: 'Belgian Chocolate Truffle',
-    variantId: 'v1',
-    variantLabel: '1 kg',
+    weightKg: 1,
+    weightLabel: '1 kg',
+    flavour: null,
+    basePrice: 1100,
+    flavourExtra: 0,
+    egglessExtra: 0,
     unitPrice: 1100,
     quantity: 1,
     eggless: false,
@@ -24,8 +28,12 @@ const sampleCart: CartItem[] = [
     key: 'c2-v2-eggless',
     cakeId: 'c2',
     cakeName: 'Classic Red Velvet',
-    variantId: 'v2',
-    variantLabel: '500g',
+    weightKg: 0.5,
+    weightLabel: '500g',
+    flavour: null,
+    basePrice: 600,
+    flavourExtra: 0,
+    egglessExtra: 50,
     unitPrice: 650,
     quantity: 2,
     eggless: true,
@@ -59,7 +67,7 @@ test('generateBillNumber increments sequential numbers for the same date', () =>
   const existing: BillOrder[] = [
     {
       id: 'o1',
-      billNumber: 'CB-261117-001',
+      billNumber: 'EC-261117-001',
       createdAt: date.toISOString(),
       items: [],
       subtotal: 500,
@@ -71,7 +79,7 @@ test('generateBillNumber increments sequential numbers for the same date', () =>
     },
     {
       id: 'o2',
-      billNumber: 'CB-261117-004',
+      billNumber: 'EC-261117-004',
       createdAt: date.toISOString(),
       items: [],
       subtotal: 800,
@@ -82,24 +90,25 @@ test('generateBillNumber increments sequential numbers for the same date', () =>
       paymentMethod: 'UPI',
     },
   ];
-  assert.equal(generateBillNumber(existing, date), 'CB-261117-005');
-  assert.equal(generateBillNumber([], date), 'CB-261117-001');
+  assert.equal(generateBillNumber(existing, date), 'EC-261117-005');
+  assert.equal(generateBillNumber([], date), 'EC-261117-001');
 });
 
-test('validateCakeForm rejects empty names, missing SKUs, and invalid variant prices', () => {
+test('validateCakeForm rejects empty names, missing SKUs, and invalid weight prices', () => {
   const invalidEmpty = validateCakeForm({
     name: '   ',
     category: 'Special Cakes',
     sku: '',
     description: '',
     egglessAvailable: true,
+    flavourChoice: false,
     inStock: true,
-    variants: [{ label: '500g', price: '0' }],
+    weights: [{ weight: '500g', price: '0' }],
   });
   assert.equal(invalidEmpty.valid, false);
   assert.ok(invalidEmpty.errors.name);
   assert.ok(invalidEmpty.errors.sku);
-  assert.ok(invalidEmpty.errors.variants);
+  assert.ok(invalidEmpty.errors.weights);
 
   const valid = validateCakeForm({
     name: 'Pistachio Rose Gateau',
@@ -107,15 +116,34 @@ test('validateCakeForm rejects empty names, missing SKUs, and invalid variant pr
     sku: 'PRG-07',
     description: 'Iranian pistachio sponge with rosewater cream',
     egglessAvailable: true,
+    flavourChoice: false,
     inStock: true,
-    variants: [
-      { label: '500g', price: '750' },
-      { label: '1 kg', price: 1400 },
+    defaultWeight: '500g',
+    weights: [
+      { weight: '500g', price: '750' },
+      { weight: '1 kg', price: 1400 },
     ],
   });
   assert.equal(valid.valid, true);
-  assert.equal(valid.normalizedVariants.length, 2);
-  assert.equal(valid.normalizedVariants[0].price, 750);
+  assert.equal(valid.normalizedWeights.length, 2);
+  assert.equal(valid.normalizedWeights[0].price, 750);
+  assert.equal(valid.defaultWeight, '500g');
+
+  const duplicate = validateCakeForm({
+    name: 'Duplicate weights',
+    category: 'Special Cakes',
+    sku: 'DUP-1',
+    description: '',
+    egglessAvailable: true,
+    flavourChoice: false,
+    inStock: true,
+    weights: [
+      { weight: '1 kg', price: '700' },
+      { weight: '1000g', price: '750' },
+    ],
+  });
+  assert.equal(duplicate.valid, false);
+  assert.match(duplicate.errors.weights ?? '', /more than once/);
 });
 
 test('filterCakes filters by category, search query, and stock availability', () => {
@@ -126,8 +154,11 @@ test('filterCakes filters by category, search query, and stock availability', ()
       category: 'Special Cakes',
       description: 'Dark ganache',
       egglessAvailable: true,
+      flavourChoice: false,
       inStock: true,
-      variants: [{ id: 'v1', label: '1 kg', price: 1100 }],
+      weights: [{ weight: '1 kg', label: '1 kg', price: 1100 }],
+      numericPrice: 1100,
+      defaultWeight: '1 kg',
       sku: 'BCT-01',
       createdAt: '2026-11-17T08:00:00Z',
     },
@@ -137,8 +168,11 @@ test('filterCakes filters by category, search query, and stock availability', ()
       category: 'Cheesecakes',
       description: 'Baked philadelphia cream cheese',
       egglessAvailable: false,
+      flavourChoice: false,
       inStock: false,
-      variants: [{ id: 'v2', label: '500g', price: 850 }],
+      weights: [{ weight: '500g', label: '500g', price: 850 }],
+      numericPrice: 850,
+      defaultWeight: '500g',
       sku: 'BBC-02',
       createdAt: '2026-11-17T08:00:00Z',
     },
@@ -155,7 +189,7 @@ test('computeDailySummary summarizes only orders from the target day', () => {
   const orders: BillOrder[] = [
     {
       id: '1',
-      billNumber: 'CB-261117-001',
+      billNumber: 'EC-261117-001',
       createdAt: today.toISOString(),
       items: [],
       subtotal: 1000,
@@ -168,7 +202,7 @@ test('computeDailySummary summarizes only orders from the target day', () => {
     },
     {
       id: '2',
-      billNumber: 'CB-261117-002',
+      billNumber: 'EC-261117-002',
       createdAt: today.toISOString(),
       items: [],
       subtotal: 500,
@@ -180,7 +214,7 @@ test('computeDailySummary summarizes only orders from the target day', () => {
     },
     {
       id: '3',
-      billNumber: 'CB-261116-001',
+      billNumber: 'EC-261116-001',
       createdAt: yesterday.toISOString(),
       items: [],
       subtotal: 2000,

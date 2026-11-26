@@ -6,6 +6,7 @@ import {
   encodeTestSlip,
   formatReceiptLines,
   getColumnsForWidth,
+  getReceiptEncodingWarnings,
   padLeftRight,
 } from './escpos';
 import type { BillOrder, ShopSettings } from '../types/pos';
@@ -25,15 +26,19 @@ const shop58: ShopSettings = {
 
 const sampleOrder: BillOrder = {
   id: 'ord-1',
-  billNumber: 'CB-261117-001',
+  billNumber: 'EC-261117-001',
   createdAt: '2026-11-17T09:15:00.000Z',
   items: [
     {
       key: '1',
       cakeId: 'c1',
       cakeName: 'Belgian Chocolate Truffle',
-      variantId: 'v1',
-      variantLabel: '1 kg',
+      weightKg: 1,
+      weightLabel: '1 kg',
+      flavour: 'Choco Truffle',
+      basePrice: 1200,
+      flavourExtra: 0,
+      egglessExtra: 100,
       unitPrice: 1200,
       quantity: 1,
       eggless: true,
@@ -65,10 +70,11 @@ test('padLeftRight fits columns precisely for 58mm (32 cols) and 80mm (48 cols)'
 test('formatReceiptLines produces wrapped 32-col lines including message and totals', () => {
   const lines = formatReceiptLines(sampleOrder, shop58, true);
   assert.ok(lines.some((l) => l.includes('CREME & CRUMB')));
-  assert.ok(lines.some((l) => l.includes('CB-261117-001')));
-  assert.ok(lines.some((l) => l.includes('[Eggless]')));
+  assert.ok(lines.some((l) => l.includes('EC-261117-001')));
+  assert.ok(lines.some((l) => l.includes('Eggless')));
+  assert.ok(lines.some((l) => l.includes('Choco Truffle')));
   assert.ok(lines.some((l) => l.includes('Happy Birthday Maya')));
-  assert.ok(lines.some((l) => l.includes('GRAND TOTAL') && l.includes('Rs.1,155')));
+  assert.ok(lines.some((l) => l.includes('TOTAL') && l.includes('Rs.1,155')));
   for (const line of lines) {
     assert.ok(line.length <= 32, `Line exceeded 32 chars: "${line}" (${line.length})`);
   }
@@ -93,4 +99,13 @@ test('encodeTestSlip and chunkBytes split payload safely for BLE MTU', () => {
   assert.ok(chunks.length >= 2);
   const reassembledLength = chunks.reduce((sum, c) => sum + c.length, 0);
   assert.equal(reassembledLength, slip.length);
+});
+
+test('Tamil receipt text is reported instead of silently claimed as printed', () => {
+  const tamilShop: ShopSettings = { ...shop58, shopName: 'எசாய் கேக்ஸ்' };
+  const warnings = getReceiptEncodingWarnings(sampleOrder, tamilShop);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /Tamil|Indic/);
+  const asciiWarnings = getReceiptEncodingWarnings(sampleOrder, shop58);
+  assert.deepEqual(asciiWarnings, []);
 });

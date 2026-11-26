@@ -1,12 +1,17 @@
 import { useMemo, useState } from 'react';
-import { CakeSlice, Pencil, Plus, Search, Trash2 } from 'lucide-react';
+import { CakeSlice, Info, Leaf, Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { CAKE_CATEGORIES, type CakeCategory, type CakeItem } from '../types/pos';
+import type { StorageMeta } from '../utils/storage';
 import { filterCakes, formatCurrency } from '../utils/billing';
+import { cakeOffersEggless, cakeOffersFlavourChoice } from '../utils/pricing';
 import { CakeFormModal } from './CakeFormModal';
+import { Switch } from './Switch';
+import { btnGhost, btnPrimary, chip, focus, iconBtn, input } from '../ui';
 
 interface CakeCatalogViewProps {
   cakes: CakeItem[];
   currencySymbol: string;
+  catalogMeta: StorageMeta;
   onSaveCake: (data: Omit<CakeItem, 'id' | 'createdAt'>, editId?: string) => void;
   onToggleStock: (cakeId: string) => void;
   onDeleteCake: (cakeId: string) => void;
@@ -15,6 +20,7 @@ interface CakeCatalogViewProps {
 export function CakeCatalogView({
   cakes,
   currencySymbol,
+  catalogMeta,
   onSaveCake,
   onToggleStock,
   onDeleteCake,
@@ -41,174 +47,186 @@ export function CakeCatalogView({
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 md:py-6 pb-24 md:pb-8 space-y-5">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+    <div className="mx-auto max-w-7xl space-y-4 px-4 pb-24 pt-4 sm:px-6 md:space-y-5 md:pb-10 md:pt-6">
+      <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-bold text-slate-950 tracking-tight">
-            Cake Menu &amp; Pricing
+          <h1 className="text-[23px] font-extrabold tracking-[-0.02em] text-ink sm:text-[26px]">
+            Cake menu
           </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5 tabular-nums">
-            {cakes.length} {cakes.length === 1 ? 'cake' : 'cakes'} listed ·{' '}
-            {cakes.filter((c) => c.inStock).length} available for billing
+          <p className="mt-0.5 text-[11px] text-muted sm:text-xs tabular-nums">
+            {cakes.length} {cakes.length === 1 ? 'cake' : 'cakes'} ·{' '}
+            {cakes.filter((c) => c.inStock).length} available
           </p>
         </div>
 
         <button
           type="button"
           onClick={openAddModal}
-          className="min-h-[44px] px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold inline-flex items-center justify-center gap-2 whitespace-nowrap self-start sm:self-auto"
+          className={`${btnPrimary} h-9 shrink-0 px-3.5 text-xs`}
         >
-          <Plus className="w-4 h-4" aria-hidden="true" />
-          <span>Add Cake</span>
+          <Plus className="h-4 w-4" aria-hidden="true" />
+          <span>New cake</span>
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col md:flex-row md:items-center gap-3">
-        <div className="relative flex-1">
-          <Search
-            className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none"
-            aria-hidden="true"
-          />
-          <label htmlFor="catalog-search" className="sr-only">
-            Search cake catalog
-          </label>
-          <input
-            id="catalog-search"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search cake name or SKU..."
-            className="w-full min-h-[44px] pl-10 pr-4 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 focus:border-slate-900 focus:outline-none"
-          />
-        </div>
-
-        <div
-          role="tablist"
-          aria-label="Filter menu by category"
-          className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0"
-        >
-          {(['All', ...CAKE_CATEGORIES] as const).map((cat) => {
-            const active = category === cat;
-            return (
-              <button
-                key={cat}
-                type="button"
-                role="tab"
-                aria-selected={active}
-                onClick={() => setCategory(cat)}
-                className={`min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap shrink-0 transition-colors ${
-                  active
-                    ? 'bg-slate-900 text-white'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                {cat}
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex items-start gap-2 rounded-xl border border-line bg-panel/60 px-3 py-2 text-[10.5px] leading-relaxed text-muted">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <p>
+          Snapshot <span className="font-semibold text-ink">{catalogMeta.catalogSourceVersion}</span>{' '}
+          · {catalogMeta.catalogCount} products imported from the verified local catalog
+          {catalogMeta.liveCatalogVerified ? '' : ' (live Supabase was not verified)'}.
+          Local prices and availability are preserved; a refresh never reprices active or past
+          bills.
+        </p>
       </div>
 
-      {/* List */}
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted"
+          aria-hidden="true"
+        />
+        <label htmlFor="catalog-search" className="sr-only">
+          Search cake catalog
+        </label>
+        <input
+          id="catalog-search"
+          type="search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search cake name or SKU…"
+          className={`${input} rounded-full pl-9`}
+        />
+      </div>
+
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar chip-fade">
+        {(['All', ...CAKE_CATEGORIES] as const).map((cat) => (
+          <button
+            key={cat}
+            type="button"
+            aria-pressed={category === cat}
+            onClick={() => setCategory(cat)}
+            className={chip(category === cat)}
+          >
+            {cat}
+          </button>
+        ))}
+      </div>
+
       {filtered.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-200 p-10 text-center">
-          <p className="text-sm font-semibold text-slate-800">No cakes match your filter</p>
-          <p className="text-xs text-slate-500 mt-1">
-            Add a new cake or reset the category search filter.
-          </p>
+        <div className="rounded-2xl border border-dashed border-line-strong bg-card/60 px-6 py-14 text-center">
+          <span className="mx-auto grid h-11 w-11 place-items-center rounded-full bg-panel text-muted">
+            <CakeSlice className="h-5 w-5" aria-hidden="true" />
+          </span>
+          <p className="mt-3 text-[13px] font-semibold text-ink">No cakes match</p>
+          <p className="mt-1 text-[11px] text-muted">Add a cake or reset the filters.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+        <div className="space-y-2 xl:grid xl:grid-cols-2 xl:gap-2.5 xl:space-y-0">
           {filtered.map((cake) => (
-            <div
-              key={cake.id}
-              className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-            >
-              <div className="flex items-start gap-3.5 min-w-0">
-                <div className="w-16 h-16 rounded-xl bg-slate-100 overflow-hidden shrink-0 flex items-center justify-center">
+            <div key={cake.id} className="rounded-xl border border-line bg-card p-2.5">
+              <div className="flex items-start gap-3">
+                <div className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-lg bg-cream">
                   {cake.imageUrl ? (
                     <img
                       src={cake.imageUrl}
-                      alt={cake.name}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="h-full w-full object-cover"
+                      onError={(e) => {
+                        if (e.currentTarget.dataset.fallback === '1') return;
+                        e.currentTarget.dataset.fallback = '1';
+                        if (cake.fallbackImageUrl) e.currentTarget.src = cake.fallbackImageUrl;
+                      }}
                     />
                   ) : (
-                    <CakeSlice className="w-6 h-6 text-slate-400" aria-hidden="true" />
+                    <CakeSlice className="h-5 w-5 text-muted-soft" aria-hidden="true" />
                   )}
                 </div>
 
-                <div className="min-w-0">
-                  <h2 className="text-base font-semibold text-slate-900 truncate">
-                    {cake.name}
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    {cake.category} · {cake.sku} · {cake.egglessAvailable ? 'Eggless opt.' : 'Contains egg'}
+                <div className="min-w-0 flex-1">
+                  <h2 className="truncate text-[13px] font-semibold text-ink">{cake.name}</h2>
+                  <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[10px] text-muted">
+                    <span className="hidden sm:inline">{cake.category}</span>
+                    <span className="hidden sm:inline" aria-hidden="true">·</span>
+                    <span className="tabular-nums">{cake.sku}</span>
+                    <span aria-hidden="true">·</span>
+                    <span className={cake.inStock ? 'text-pistachio' : 'text-caramel'}>
+                      {cake.inStock ? 'In stock' : 'Sold out'}
+                    </span>
+                    {cakeOffersEggless(cake) && (
+                      <span className="inline-flex items-center gap-0.5 font-semibold text-pistachio">
+                        <Leaf className="h-2.5 w-2.5" aria-hidden="true" /> Eggless
+                      </span>
+                    )}
+                    {cakeOffersFlavourChoice(cake) && (
+                      <span className="font-semibold text-caramel">Flavour choice</span>
+                    )}
                   </p>
-                  <p className="text-xs font-medium text-slate-800 mt-1.5 tabular-nums">
-                    {cake.variants
-                      .map((v) => `${v.label}: ${formatCurrency(v.price, currencySymbol)}`)
+                  <p className="mt-1 truncate text-[11px] font-semibold tabular-nums text-ink">
+                    {cake.weights
+                      .slice(0, 3)
+                      .map(
+                        (w) =>
+                          `${w.label} ${formatCurrency(w.price, currencySymbol)}`,
+                      )
                       .join(' · ')}
+                    {cake.weights.length > 3 ? ` +${cake.weights.length - 3} more` : ''}
                   </p>
+                </div>
+
+                <div className="flex shrink-0 items-center gap-1 self-start pt-1">
+                  <Switch
+                    tone="pistachio"
+                    checked={cake.inStock}
+                    onChange={() => onToggleStock(cake.id)}
+                    label={`Mark ${cake.name} as ${cake.inStock ? 'sold out' : 'in stock'}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(cake)}
+                    aria-label={`Edit ${cake.name}`}
+                    className={iconBtn}
+                  >
+                    <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteId(cake.id)}
+                    aria-label={`Delete ${cake.name}`}
+                    className={`${iconBtn} hover:border-berry/30 hover:bg-berry-tint hover:text-berry-deep`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
                 </div>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onToggleStock(cake.id)}
-                  aria-pressed={cake.inStock}
-                  className={`min-h-[40px] px-3 py-1.5 rounded-xl border text-xs font-semibold whitespace-nowrap transition-colors ${
-                    cake.inStock
-                      ? 'bg-emerald-50 border-emerald-200 text-emerald-900 hover:bg-emerald-100'
-                      : 'bg-slate-100 border-slate-200 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  {cake.inStock ? 'In Stock' : 'Sold Out'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => openEditModal(cake)}
-                  aria-label={`Edit ${cake.name}`}
-                  className="min-h-[40px] px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-800 inline-flex items-center gap-1.5"
-                >
-                  <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
-                  <span>Edit</span>
-                </button>
-
-                {confirmDeleteId === cake.id ? (
-                  <div className="inline-flex items-center gap-1.5">
+              {confirmDeleteId === cake.id && (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-berry-tint/70 px-2.5 py-2">
+                  <p className="text-[10.5px] font-medium text-berry-deep">
+                    Delete “{cake.name}” from the menu?
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDeleteId(null)}
+                      className={`${btnGhost} h-8 px-2.5 text-[10.5px]`}
+                    >
+                      Keep
+                    </button>
                     <button
                       type="button"
                       onClick={() => {
                         onDeleteCake(cake.id);
                         setConfirmDeleteId(null);
                       }}
-                      className="min-h-[40px] px-3 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold"
+                      className={`inline-flex h-8 items-center rounded-lg bg-berry px-2.5 text-[10.5px] font-bold text-white transition hover:bg-berry-deep ${focus}`}
                     >
-                      Confirm Delete
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setConfirmDeleteId(null)}
-                      className="min-h-[40px] px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-medium text-slate-600"
-                    >
-                      Cancel
+                      Delete
                     </button>
                   </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setConfirmDeleteId(cake.id)}
-                    aria-label={`Delete ${cake.name}`}
-                    className="w-10 h-10 rounded-xl border border-slate-200 hover:bg-red-50 hover:text-red-700 hover:border-red-200 flex items-center justify-center text-slate-500"
-                  >
-                    <Trash2 className="w-4 h-4" aria-hidden="true" />
-                  </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

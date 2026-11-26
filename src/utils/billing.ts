@@ -2,9 +2,11 @@ import type {
   BillOrder,
   CakeCategory,
   CakeItem,
-  CakeVariant,
+  CakeWeight,
   CartItem,
 } from '../types/pos';
+import { parseWeightKg } from './pricing';
+import { orderStatus } from './orders';
 
 export interface BillCalculation {
   subtotal: number;
@@ -59,7 +61,7 @@ export function generateBillNumber(existingOrders: BillOrder[], now = new Date()
   const yyyy = now.getFullYear().toString().slice(-2);
   const mm = String(now.getMonth() + 1).padStart(2, '0');
   const dd = String(now.getDate()).padStart(2, '0');
-  const prefix = `CB-${yyyy}${mm}${dd}`;
+  const prefix = `EC-${yyyy}${mm}${dd}`;
 
   let maxSeq = 0;
   for (const order of existingOrders) {
@@ -80,8 +82,10 @@ export interface CakeFormInput {
   sku: string;
   description: string;
   egglessAvailable: boolean;
+  flavourChoice: boolean;
   inStock: boolean;
-  variants: Array<{ id?: string; label: string; price: string | number }>;
+  defaultWeight?: string;
+  weights: Array<{ weight: string; label?: string; price: string | number }>;
 }
 
 export interface CakeValidationResult {
@@ -89,9 +93,10 @@ export interface CakeValidationResult {
   errors: {
     name?: string;
     sku?: string;
-    variants?: string;
+    weights?: string;
   };
-  normalizedVariants: CakeVariant[];
+  normalizedWeights: CakeWeight[];
+  defaultWeight: string;
 }
 
 export function validateCakeForm(input: CakeFormInput): CakeValidationResult {
@@ -107,36 +112,57 @@ export function validateCakeForm(input: CakeFormInput): CakeValidationResult {
     errors.sku = 'Item code (SKU) is required.';
   }
 
-  const normalizedVariants: CakeVariant[] = [];
-  if (!input.variants || input.variants.length === 0) {
-    errors.variants = 'Add at least one weight or size price.';
+  const normalizedWeights: CakeWeight[] = [];
+  if (!input.weights || input.weights.length === 0) {
+    errors.weights = 'Add at least one weight and price.';
   } else {
-    for (let i = 0; i < input.variants.length; i += 1) {
-      const v = input.variants[i];
-      const label = v.label.trim();
-      const numericPrice = typeof v.price === 'number' ? v.price : Number.parseFloat(v.price);
+    const seen = new Set<number>();
+    for (let i = 0; i < input.weights.length; i += 1) {
+      const w = input.weights[i];
+      const weight = w.weight.trim();
+      const kg = parseWeightKg(weight);
+      const numericPrice = typeof w.price === 'number' ? w.price : Number.parseFloat(w.price);
 
-      if (!label) {
-        errors.variants = `Variant #${i + 1} needs a size or weight label (e.g. 500g).`;
+      if (kg == null) {
+        errors.weights = `Weight #${i + 1} must be a real weight such as "1 kg" or "500g".`;
         break;
       }
+      if (kg > 8) {
+        errors.weights = 'Weights above 8 kg are not offered.';
+        break;
+      }
+      const grams = Math.round(kg * 1000);
+      if (seen.has(grams)) {
+        errors.weights = `Weight "${weight}" is listed more than once.`;
+        break;
+      }
+      seen.add(grams);
+
       if (!Number.isFinite(numericPrice) || numericPrice <= 0) {
-        errors.variants = `Variant "${label}" must have a price greater than 0.`;
+        errors.weights = `Weight "${weight}" must have a price greater than 0.`;
         break;
       }
 
-      normalizedVariants.push({
-        id: v.id || `var-${Date.now()}-${i}`,
-        label,
+      normalizedWeights.push({
+        weight,
+        label: w.label?.trim() || weight,
         price: roundMoney(numericPrice),
       });
     }
   }
 
+  const requestedDefault = input.defaultWeight?.trim();
+  const defaultWeight =
+    (requestedDefault &&
+      normalizedWeights.find((w) => w.weight === requestedDefault)?.weight) ||
+    normalizedWeights[0]?.weight ||
+    '';
+
   return {
     valid: Object.keys(errors).length === 0,
     errors,
-    normalizedVariants,
+    normalizedWeights,
+    defaultWeight,
   };
 }
 
@@ -179,6 +205,7 @@ export function computeDailySummary(orders: BillOrder[], referenceDate = new Dat
   const d = referenceDate.getDate();
 
   const todaysOrders = orders.filter((order) => {
+    if (order.isDemo || orderStatus(order) !== 'completed') return false;
     const dt = new Date(order.createdAt);
     return dt.getFullYear() === y && dt.getMonth() === m && dt.getDate() === d;
   });

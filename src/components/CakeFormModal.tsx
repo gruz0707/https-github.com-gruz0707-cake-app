@@ -1,8 +1,12 @@
-import { useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Plus, Trash2, Upload, X } from 'lucide-react';
-import { PRESET_CAKE_IMAGES } from '../data/seedData';
+import { useSheetHistory } from '../hooks/useSheetHistory';
+import { PRESET_CAKE_IMAGES } from '../data/catalog';
 import { CAKE_CATEGORIES, type CakeCategory, type CakeItem } from '../types/pos';
 import { validateCakeForm } from '../utils/billing';
+import { cakeOffersFlavourChoice, isEgglessProhibited } from '../utils/pricing';
+import { Switch } from './Switch';
+import { btnGhost, btnPrimary, fieldLabel, focus, input, inputSmall } from '../ui';
 
 interface CakeFormModalProps {
   initialCake?: CakeItem | null;
@@ -30,29 +34,48 @@ export function CakeFormModal({
     initialCake?.egglessAvailable ?? true,
   );
   const [inStock, setInStock] = useState(initialCake?.inStock ?? true);
-  const [variants, setVariants] = useState<Array<{ id?: string; label: string; price: string }>>(
-    initialCake?.variants.map((v) => ({
-      id: v.id,
-      label: v.label,
-      price: String(v.price),
+  const [weights, setWeights] = useState<Array<{ weight: string; price: string }>>(
+    initialCake?.weights.map((w) => ({
+      weight: w.weight,
+      price: String(w.price),
     })) ?? [
-      { label: '500g', price: '' },
-      { label: '1 kg', price: '' },
+      { weight: '0.5 kg', price: '' },
+      { weight: '1 kg', price: '' },
     ],
+  );
+  const [defaultWeight, setDefaultWeight] = useState(
+    initialCake?.defaultWeight ?? initialCake?.weights[0]?.weight ?? '1 kg',
   );
   const [errors, setErrors] = useState<{
     name?: string;
     sku?: string;
-    variants?: string;
+    weights?: string;
   }>({});
 
-  const handleAddVariantRow = () => {
-    setVariants((prev) => [...prev, { label: '', price: '' }]);
+  const sourceCake = Boolean(initialCake?.sourceCategory);
+  const egglessProhibited = initialCake ? isEgglessProhibited(initialCake) : false;
+  const closeForm = useSheetHistory(true, onClose);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeForm();
+    };
+    window.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [closeForm]);
+
+  const handleAddWeightRow = () => {
+    setWeights((prev) => [...prev, { weight: '', price: '' }]);
   };
 
-  const handleRemoveVariantRow = (idx: number) => {
-    if (variants.length <= 1) return;
-    setVariants((prev) => prev.filter((_, i) => i !== idx));
+  const handleRemoveWeightRow = (idx: number) => {
+    if (weights.length <= 1) return;
+    setWeights((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
@@ -75,8 +98,10 @@ export function CakeFormModal({
       sku,
       description,
       egglessAvailable,
+      flavourChoice: false,
       inStock,
-      variants,
+      defaultWeight,
+      weights,
     });
 
     if (!validation.valid) {
@@ -84,20 +109,35 @@ export function CakeFormModal({
       return;
     }
 
+    const defaultEntry =
+      validation.normalizedWeights.find((w) => w.weight === validation.defaultWeight) ??
+      validation.normalizedWeights[0];
+
     onSave(
       {
         name: name.trim(),
         category,
+        sourceCategory: initialCake?.sourceCategory,
         sku: sku.trim().toUpperCase(),
         description: description.trim(),
         imageUrl: imageUrl.trim() || undefined,
-        egglessAvailable,
+        fallbackImageUrl: '/cakes/fallback.png',
+        egglessAvailable: egglessProhibited ? false : egglessAvailable,
+        flavourChoice: initialCake
+          ? initialCake.flavourChoice
+          : cakeOffersFlavourChoice({
+              sourceCategory: undefined,
+              category,
+              flavourChoice: false,
+            }),
         inStock,
-        variants: validation.normalizedVariants,
+        numericPrice: defaultEntry?.price ?? 0,
+        defaultWeight: defaultEntry?.weight ?? validation.defaultWeight,
+        weights: validation.normalizedWeights,
       },
       initialCake?.id,
     );
-    onClose();
+    closeForm();
   };
 
   return (
@@ -105,28 +145,42 @@ export function CakeFormModal({
       role="dialog"
       aria-modal="true"
       aria-labelledby="cake-form-title"
-      className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-ink/55 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={closeForm}
     >
-      <div className="bg-white w-full sm:max-w-xl rounded-t-3xl sm:rounded-2xl shadow-xl border border-slate-200 max-h-[92vh] flex flex-col overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between">
-          <h2 id="cake-form-title" className="font-display text-lg font-semibold text-slate-900">
-            {initialCake ? `Edit ${initialCake.name}` : 'Add New Cake'}
-          </h2>
+      <div
+        className="animate-sheet-up flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-[28px] border border-line bg-card shadow-2xl sm:max-w-xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 border-b border-line px-5 py-3.5">
+          <div className="min-w-0">
+            <h2
+              id="cake-form-title"
+              className="truncate text-[15px] font-extrabold tracking-[-0.01em] text-ink"
+            >
+              {initialCake ? `Edit ${initialCake.name}` : 'New cake'}
+            </h2>
+            <p className="mt-0.5 text-[10.5px] text-muted">
+              {sourceCake
+                ? 'Source category and flavour rules stay locked; local prices remain yours.'
+                : 'Menu details, weights, and photo.'}
+            </p>
+          </div>
           <button
             type="button"
-            onClick={onClose}
+            onClick={closeForm}
             aria-label="Close cake form"
-            className="w-11 h-11 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-600"
+            className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg text-muted transition-colors hover:bg-panel hover:text-ink ${focus}`}
           >
-            <X className="w-5 h-5" aria-hidden="true" />
+            <X className="h-4 w-4" aria-hidden="true" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} noValidate className="flex-1 overflow-y-auto p-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <form onSubmit={handleSubmit} noValidate className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 pb-5 pt-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <div className="sm:col-span-2">
-              <label htmlFor="cake-name" className="block text-xs font-semibold text-slate-700 mb-1">
-                Cake Name *
+              <label htmlFor="cake-name" className={fieldLabel}>
+                Cake name *
               </label>
               <input
                 id="cake-name"
@@ -134,18 +188,18 @@ export function CakeFormModal({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g. Pistachio Rose Gateau"
-                className="w-full min-h-[44px] px-3.5 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 focus:border-slate-900 focus:outline-none"
+                className={input}
               />
               {errors.name && (
-                <p role="alert" className="mt-1 text-xs font-medium text-red-700">
+                <p role="alert" className="mt-1 text-[11px] font-semibold text-berry-deep">
                   {errors.name}
                 </p>
               )}
             </div>
 
             <div>
-              <label htmlFor="cake-sku" className="block text-xs font-semibold text-slate-700 mb-1">
-                Item Code (SKU) *
+              <label htmlFor="cake-sku" className={fieldLabel}>
+                SKU *
               </label>
               <input
                 id="cake-sku"
@@ -153,26 +207,27 @@ export function CakeFormModal({
                 value={sku}
                 onChange={(e) => setSku(e.target.value)}
                 placeholder="e.g. PRG-07"
-                className="w-full min-h-[44px] px-3.5 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 uppercase focus:border-slate-900 focus:outline-none"
+                className={`${input} uppercase`}
               />
               {errors.sku && (
-                <p role="alert" className="mt-1 text-xs font-medium text-red-700">
+                <p role="alert" className="mt-1 text-[11px] font-semibold text-berry-deep">
                   {errors.sku}
                 </p>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label htmlFor="cake-category" className="block text-xs font-semibold text-slate-700 mb-1">
+              <label htmlFor="cake-category" className={fieldLabel}>
                 Category
               </label>
               <select
                 id="cake-category"
                 value={category}
+                disabled={sourceCake}
                 onChange={(e) => setCategory(e.target.value as CakeCategory)}
-                className="w-full min-h-[44px] px-3.5 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 focus:border-slate-900 focus:outline-none"
+                className={`${input} disabled:bg-panel disabled:text-muted`}
               >
                 {CAKE_CATEGORIES.map((cat) => (
                   <option key={cat} value={cat}>
@@ -180,130 +235,167 @@ export function CakeFormModal({
                   </option>
                 ))}
               </select>
+              {sourceCake && (
+                <p className="mt-1 text-[10px] text-muted">
+                  Locked to the verified source category “{initialCake?.sourceCategory}”.
+                </p>
+              )}
             </div>
 
-            <div className="flex items-end gap-4 pb-1">
-              <label className="inline-flex items-center gap-2 min-h-[44px] cursor-pointer text-xs font-medium text-slate-800">
-                <input
-                  type="checkbox"
-                  checked={egglessAvailable}
-                  onChange={(e) => setEgglessAvailable(e.target.checked)}
-                  className="w-4 h-4 accent-slate-900 rounded"
+            <div className="flex items-center gap-5 sm:pb-0.5">
+              <span className="flex items-center gap-2 text-[11px] font-semibold text-ink">
+                <Switch
+                  checked={egglessProhibited ? false : egglessAvailable}
+                  onChange={(v) => {
+                    if (!egglessProhibited) setEgglessAvailable(v);
+                  }}
+                  label={
+                    egglessProhibited
+                      ? 'Eggless is prohibited for this cake'
+                      : 'Eggless option available'
+                  }
+                  className={egglessProhibited ? 'opacity-40' : ''}
                 />
-                <span>Eggless option</span>
-              </label>
-              <label className="inline-flex items-center gap-2 min-h-[44px] cursor-pointer text-xs font-medium text-slate-800">
-                <input
-                  type="checkbox"
+                Eggless option
+              </span>
+              <span className="flex items-center gap-2 text-[11px] font-semibold text-ink">
+                <Switch
                   checked={inStock}
-                  onChange={(e) => setInStock(e.target.checked)}
-                  className="w-4 h-4 accent-slate-900 rounded"
+                  onChange={setInStock}
+                  tone="pistachio"
+                  label="Item is in stock"
                 />
-                <span>In stock</span>
-              </label>
+                In stock
+              </span>
             </div>
           </div>
 
-          <div>
-            <label htmlFor="cake-description" className="block text-xs font-semibold text-slate-700 mb-1">
-              Short Description
+          {egglessProhibited && (
+            <p className="mt-1 text-[10px] font-medium text-caramel">
+              Eggless is not offered on this item by the source rules.
+            </p>
+          )}
+
+          <div className="mt-3">
+            <label htmlFor="cake-description" className={fieldLabel}>
+              Short description
             </label>
             <input
               id="cake-description"
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Sponge flavor, filling, or garnish notes"
-              className="w-full min-h-[44px] px-3.5 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 focus:border-slate-900 focus:outline-none"
+              placeholder="Sponge flavour, filling, or garnish notes"
+              className={input}
             />
           </div>
 
-          {/* Variants */}
-          <div className="space-y-2">
+          <div className="mt-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-700">
-                Weights &amp; Prices ({currencySymbol}) *
-              </span>
+              <span className={fieldLabel}>Weights &amp; prices ({currencySymbol}) *</span>
               <button
                 type="button"
-                onClick={handleAddVariantRow}
-                className="min-h-[36px] px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-semibold text-slate-800 hover:bg-slate-50 inline-flex items-center gap-1"
+                onClick={handleAddWeightRow}
+                className={`${btnGhost} h-8 px-2.5 text-[11px]`}
               >
-                <Plus className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Add Size</span>
+                <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Add weight</span>
               </button>
             </div>
 
             <div className="space-y-2">
-              {variants.map((variant, idx) => (
+              {weights.map((row, idx) => (
                 <div key={idx} className="flex items-center gap-2">
                   <div className="flex-1">
-                    <label htmlFor={`var-label-${idx}`} className="sr-only">
-                      Size or weight label #{idx + 1}
+                    <label htmlFor={`weight-label-${idx}`} className="sr-only">
+                      Weight #{idx + 1}
                     </label>
                     <input
-                      id={`var-label-${idx}`}
+                      id={`weight-label-${idx}`}
                       type="text"
-                      value={variant.label}
+                      value={row.weight}
                       onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx ? { ...row, label: e.target.value } : row,
+                        setWeights((prev) =>
+                          prev.map((r, i) =>
+                            i === idx ? { ...r, weight: e.target.value } : r,
                           ),
                         )
                       }
-                      placeholder="e.g. 500g, 1 kg, Slice"
-                      className="w-full min-h-[44px] px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 focus:border-slate-900 focus:outline-none"
+                      placeholder="e.g. 0.5 kg, 1 kg"
+                      className={inputSmall}
                     />
                   </div>
-                  <div className="w-32">
-                    <label htmlFor={`var-price-${idx}`} className="sr-only">
+                  <div className="w-28">
+                    <label htmlFor={`weight-price-${idx}`} className="sr-only">
                       Price #{idx + 1}
                     </label>
                     <input
-                      id={`var-price-${idx}`}
+                      id={`weight-price-${idx}`}
                       type="number"
                       min={1}
                       step="any"
-                      value={variant.price}
+                      value={row.price}
                       onChange={(e) =>
-                        setVariants((prev) =>
-                          prev.map((row, i) =>
-                            i === idx ? { ...row, price: e.target.value } : row,
+                        setWeights((prev) =>
+                          prev.map((r, i) =>
+                            i === idx ? { ...r, price: e.target.value } : r,
                           ),
                         )
                       }
                       placeholder="Price"
-                      className="w-full min-h-[44px] px-3 py-2 text-sm rounded-xl border border-slate-200 bg-white text-slate-900 tabular-nums focus:border-slate-900 focus:outline-none"
+                      className={`${inputSmall} tabular-nums`}
                     />
                   </div>
-                  {variants.length > 1 && (
+                  {weights.length > 1 && (
                     <button
                       type="button"
-                      onClick={() => handleRemoveVariantRow(idx)}
-                      aria-label={`Remove size row ${idx + 1}`}
-                      className="w-11 h-11 rounded-xl border border-slate-200 hover:bg-red-50 hover:text-red-700 flex items-center justify-center text-slate-500"
+                      onClick={() => handleRemoveWeightRow(idx)}
+                      aria-label={`Remove weight row ${idx + 1}`}
+                      className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg border border-line text-muted transition-colors hover:border-berry/30 hover:bg-berry-tint hover:text-berry-deep ${focus}`}
                     >
-                      <Trash2 className="w-4 h-4" aria-hidden="true" />
+                      <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
                     </button>
                   )}
                 </div>
               ))}
             </div>
-            {errors.variants && (
-              <p role="alert" className="text-xs font-medium text-red-700">
-                {errors.variants}
+
+            <div>
+              <label htmlFor="default-weight" className={fieldLabel}>
+                Minimum / default weight
+              </label>
+              <select
+                id="default-weight"
+                value={defaultWeight}
+                onChange={(e) => setDefaultWeight(e.target.value)}
+                className={inputSmall}
+              >
+                {weights
+                  .filter((w) => w.weight.trim())
+                  .map((w) => (
+                    <option key={w.weight} value={w.weight}>
+                      {w.weight}
+                    </option>
+                  ))}
+              </select>
+              <p className="mt-1 text-[10px] text-muted">
+                The default is the minimum offered size; larger weights use its per-kg rate.
+              </p>
+            </div>
+
+            {errors.weights && (
+              <p role="alert" className="text-[11px] font-semibold text-berry-deep">
+                {errors.weights}
               </p>
             )}
           </div>
 
-          {/* Photo picker */}
-          <div className="space-y-2">
+          <div className="mt-4 space-y-2">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-slate-700">Cake Photo</span>
-              <label className="min-h-[36px] px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-semibold text-slate-800 hover:bg-slate-50 inline-flex items-center gap-1.5 cursor-pointer">
-                <Upload className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Upload from Phone</span>
+              <span className={fieldLabel}>Cake photo</span>
+              <label className={`${btnGhost} h-8 cursor-pointer px-2.5 text-[11px]`}>
+                <Upload className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Upload</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -312,7 +404,7 @@ export function CakeFormModal({
                 />
               </label>
             </div>
-            <div className="grid grid-cols-6 gap-2">
+            <div className="grid grid-cols-6 gap-1.5">
               {PRESET_CAKE_IMAGES.map((preset) => {
                 const selected = imageUrl === preset.url;
                 return (
@@ -322,15 +414,17 @@ export function CakeFormModal({
                     onClick={() => setImageUrl(preset.url)}
                     aria-label={`Select ${preset.label} photo`}
                     aria-pressed={selected}
-                    className={`aspect-square rounded-xl overflow-hidden border-2 transition-all ${
-                      selected ? 'border-slate-900 scale-105' : 'border-transparent opacity-75 hover:opacity-100'
+                    className={`aspect-square overflow-hidden rounded-lg border transition-all ${focus} ${
+                      selected
+                        ? 'border-berry ring-2 ring-berry/25 ring-offset-1 ring-offset-card'
+                        : 'border-transparent opacity-75 hover:opacity-100'
                     }`}
                   >
                     <img
                       src={preset.url}
                       alt={preset.label}
-                      referrerPolicy="no-referrer"
-                      className="w-full h-full object-cover"
+                      loading="lazy"
+                      className="h-full w-full object-cover"
                     />
                   </button>
                 );
@@ -338,19 +432,12 @@ export function CakeFormModal({
             </div>
           </div>
 
-          <div className="pt-3 border-t border-slate-200 flex items-center justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="min-h-[44px] px-4 py-2 rounded-xl border border-slate-200 text-sm font-medium text-slate-700 hover:bg-slate-50"
-            >
+          <div className="sticky bottom-0 -mx-5 mt-4 flex items-center justify-end gap-2 border-t border-line bg-card/95 px-5 pb-[calc(0.75rem+env(safe-area-inset-bottom,0px))] pt-3 backdrop-blur">
+            <button type="button" onClick={closeForm} className={btnGhost}>
               Cancel
             </button>
-            <button
-              type="submit"
-              className="min-h-[44px] px-5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold"
-            >
-              {initialCake ? 'Save Changes' : 'Save Cake to Menu'}
+            <button type="submit" className={`${btnPrimary} px-5`}>
+              {initialCake ? 'Save changes' : 'Save cake'}
             </button>
           </div>
         </form>

@@ -93,7 +93,13 @@ export function RevenueDashboardView({
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   }, []);
 
-  if (orders.length === 0) {
+  const realOrderCount = useMemo(
+    () => orders.filter((order) => !order.isDemo && (order.status ?? 'completed') === 'completed').length,
+    [orders],
+  );
+  const hasDemoOrders = orders.some((order) => order.isDemo);
+
+  if (realOrderCount === 0) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 md:py-6 pb-24 md:pb-8 space-y-5">
         <div>
@@ -129,9 +135,14 @@ export function RevenueDashboardView({
           Revenue Dashboard
         </h1>
         <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-          Live daily and monthly revenue aggregated from {overview.totalOrders} recorded{' '}
+          Live daily and monthly revenue aggregated from {overview.totalOrders} real recorded{' '}
           {overview.totalOrders === 1 ? 'bill' : 'bills'}.
         </p>
+        {hasDemoOrders && (
+          <p className="mt-1 inline-flex rounded-md bg-caramel-tint px-2 py-1 text-[10px] font-semibold text-caramel">
+            Demo bills are kept in history but excluded from these totals.
+          </p>
+        )}
       </div>
 
       {/* KPI Summary Row */}

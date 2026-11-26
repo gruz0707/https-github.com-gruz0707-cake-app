@@ -1,4 +1,5 @@
 import type { BillOrder, PaymentMethod } from '../types/pos';
+import { orderStatus } from './orders';
 import { roundMoney } from './billing';
 
 export interface DailyRevenuePoint {
@@ -54,6 +55,7 @@ export function buildDailyRevenueSeries(
   const byDay = new Map<string, { revenue: number; ordersCount: number }>();
 
   for (const order of orders) {
+    if (order.isDemo || orderStatus(order) !== 'completed') continue;
     const dt = new Date(order.createdAt);
     if (Number.isNaN(dt.getTime())) continue;
     const key = toLocalDateKey(dt);
@@ -100,6 +102,7 @@ export function buildMonthlyRevenueSeries(
   const byMonth = new Map<string, { revenue: number; ordersCount: number }>();
 
   for (const order of orders) {
+    if (order.isDemo || orderStatus(order) !== 'completed') continue;
     const dt = new Date(order.createdAt);
     if (Number.isNaN(dt.getTime())) continue;
     const key = toLocalMonthKey(dt);
@@ -144,6 +147,7 @@ export function computeRevenueOverview(
   let monthOrders = 0;
 
   for (const order of orders) {
+    if (order.isDemo || orderStatus(order) !== 'completed') continue;
     const dt = new Date(order.createdAt);
     if (Number.isNaN(dt.getTime())) continue;
     totalRevenue = roundMoney(totalRevenue + order.total);
@@ -158,7 +162,9 @@ export function computeRevenueOverview(
     }
   }
 
-  const totalOrders = orders.length;
+  const totalOrders = orders.filter(
+    (order) => !order.isDemo && orderStatus(order) === 'completed',
+  ).length;
   const averageTicket = totalOrders > 0 ? roundMoney(totalRevenue / totalOrders) : 0;
 
   return {
@@ -181,6 +187,7 @@ export function buildPaymentBreakdown(orders: BillOrder[]): PaymentBreakdownRow[
 
   let grandTotal = 0;
   for (const order of orders) {
+    if (order.isDemo || orderStatus(order) !== 'completed') continue;
     const bucket = totals.get(order.paymentMethod) ?? { revenue: 0, ordersCount: 0 };
     bucket.revenue = roundMoney(bucket.revenue + order.total);
     bucket.ordersCount += 1;

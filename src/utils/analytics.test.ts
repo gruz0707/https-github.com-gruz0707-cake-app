@@ -16,7 +16,7 @@ function makeOrder(
 ): BillOrder {
   return {
     id,
-    billNumber: `CB-${id}`,
+    billNumber: `EC-${id}`,
     createdAt: isoDate,
     items: [],
     subtotal: total,
@@ -90,4 +90,26 @@ test('computeRevenueOverview and buildPaymentBreakdown calculate accurate KPIs',
   assert.equal(breakdown.find((r) => r.method === 'Cash')?.sharePercent, 50);
   assert.equal(breakdown.find((r) => r.method === 'UPI')?.sharePercent, 25);
   assert.equal(breakdown.find((r) => r.method === 'Card')?.sharePercent, 25);
+});
+
+test('demo bills are kept in history but excluded from revenue KPIs', () => {
+  const ref = new Date(2026, 10, 17, 15, 0, 0);
+  const real = makeOrder('real-1', new Date(2026, 10, 17, 9, 0, 0).toISOString(), 900, 'Cash');
+  const demo: BillOrder = {
+    ...makeOrder('seed-ord-1', new Date(2026, 10, 17, 10, 0, 0).toISOString(), 5000, 'UPI'),
+    isDemo: true,
+  };
+  const overview = computeRevenueOverview([real, demo], ref);
+  assert.equal(overview.totalRevenue, 900);
+  assert.equal(overview.totalOrders, 1);
+  assert.equal(overview.todayRevenue, 900);
+  assert.equal(overview.averageTicket, 900);
+
+  const daily = buildDailyRevenueSeries([real, demo], 1, ref);
+  assert.equal(daily[0].revenue, 900);
+  assert.equal(daily[0].ordersCount, 1);
+
+  const breakdown = buildPaymentBreakdown([real, demo]);
+  assert.equal(breakdown.find((r) => r.method === 'UPI')?.revenue, 0);
+  assert.equal(breakdown.find((r) => r.method === 'Cash')?.sharePercent, 100);
 });

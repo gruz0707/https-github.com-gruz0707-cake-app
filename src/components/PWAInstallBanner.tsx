@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, Download, Smartphone, X } from 'lucide-react';
 import { usePWAInstall } from '../hooks/usePWAInstall';
+import { btnGhost, focus } from '../ui';
 
 export function PWAInstallBanner() {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
@@ -17,52 +18,45 @@ export function PWAInstallBanner() {
 
   return (
     <>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-3">
-        <div className="bg-white border border-slate-200 rounded-2xl px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
+      <div className="mx-auto max-w-7xl px-4 pt-3 sm:px-6">
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-card px-3 py-2">
+          <div className="flex min-w-0 items-center gap-2.5">
             <img
               src="/pwa-192x192.png"
-              alt="Crème & Crumb POS icon"
-              className="w-10 h-10 rounded-xl shrink-0"
+              alt=""
+              className="h-8 w-8 shrink-0 rounded-lg"
             />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-slate-900 truncate">
-                Install Crème &amp; Crumb POS
+              <p className="truncate text-[12px] font-semibold text-ink">
+                Install Esai Cakes POS
               </p>
-              <p className="text-xs text-slate-500 truncate">
-                Run fullscreen on Android with offline billing &amp; Bluetooth printing.
+              <p className="truncate text-[10px] text-muted">
+                Fullscreen offline billing. Native Bluetooth receipts need the Android APK.
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            {isInstallable ? (
-              <button
-                type="button"
-                onClick={install}
-                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <Download className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Install App</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowIOSGuide(true)}
-                className="min-h-[40px] px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap"
-              >
-                <Smartphone className="w-3.5 h-3.5" aria-hidden="true" />
-                <span>Install on iOS</span>
-              </button>
-            )}
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={isInstallable ? install : () => setShowIOSGuide(true)}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-lg bg-berry px-2.5 text-[10.5px] font-bold text-white transition-colors hover:bg-berry-deep ${focus}`}
+            >
+              {isInstallable ? (
+                <Download className="h-3 w-3" aria-hidden="true" />
+              ) : (
+                <Smartphone className="h-3 w-3" aria-hidden="true" />
+              )}
+              <span>Install</span>
+            </button>
 
             <button
               type="button"
               onClick={() => setDismissed(true)}
               aria-label="Dismiss install banner"
-              className="w-10 h-10 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-500"
+              className={`grid h-8 w-8 place-items-center rounded-lg text-muted transition-colors hover:bg-panel hover:text-ink ${focus}`}
             >
-              <X className="w-4 h-4" aria-hidden="true" />
+              <X className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -73,23 +67,30 @@ export function PWAInstallBanner() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="ios-install-title"
-          className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4 backdrop-blur-sm"
+          onClick={() => setShowIOSGuide(false)}
         >
-          <div className="bg-white w-full max-w-sm rounded-2xl p-5 border border-slate-200 shadow-xl space-y-3">
-            <h2 id="ios-install-title" className="font-display text-lg font-semibold text-slate-900">
+          <div
+            className="w-full max-w-sm space-y-3 rounded-2xl border border-line bg-card p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2
+              id="ios-install-title"
+              className="text-[15px] font-extrabold tracking-[-0.01em] text-ink"
+            >
               Install on iPhone / iPad
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-              1. Tap the <strong>Share</strong> icon in Safari&apos;s toolbar.
+            <p className="text-xs leading-relaxed text-muted">
+              1. Tap the <strong className="text-ink">Share</strong> icon in Safari&apos;s toolbar.
               <br />
-              2. Scroll down and tap <strong>Add to Home Screen</strong>.
+              2. Scroll down and tap <strong className="text-ink">Add to Home Screen</strong>.
             </p>
             <button
               type="button"
               onClick={() => setShowIOSGuide(false)}
-              className="w-full min-h-[44px] rounded-xl bg-slate-900 text-white text-sm font-semibold"
+              className="h-10 w-full rounded-xl bg-berry text-xs font-bold text-white transition-colors hover:bg-berry-deep"
             >
-              Got It
+              Got it
             </button>
           </div>
         </div>
@@ -105,35 +106,34 @@ export function AndroidInstallCard() {
   return (
     <section
       aria-label="Android App Installation"
-      className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+      className="flex flex-col justify-between gap-3 rounded-2xl border border-line bg-card p-4 sm:flex-row sm:items-center"
     >
-      <div className="flex items-start gap-3.5">
+      <div className="flex items-start gap-3">
         <img
           src="/pwa-192x192.png"
-          alt="Crème & Crumb Android App Icon"
-          className="w-12 h-12 rounded-xl shrink-0"
+          alt=""
+          className="h-10 w-10 shrink-0 rounded-xl"
         />
         <div>
-          <h2 className="font-display text-lg font-semibold text-slate-900">
-            Android Mobile App (Offline POS)
+          <h2 className="text-[13px] font-semibold text-ink">
+            Android app · offline POS
           </h2>
-          <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+          <p className="mt-0.5 text-[10.5px] leading-relaxed text-muted">
             {isInstalled
-              ? 'Running in standalone mobile app mode with offline menu & receipt caching.'
-              : 'Install Crème & Crumb POS on your Android phone home screen for fullscreen offline billing and direct Web Bluetooth printing.'}
+              ? 'Running in standalone app mode with offline menu and receipt caching.'
+              : 'Install this browser app for offline billing. Native Classic/BLE printing requires the Android APK (Web Bluetooth works only in supported browsers).'}
           </p>
 
           {showManualSteps && !isInstalled && (
-            <p className="mt-2.5 text-xs text-slate-700 bg-slate-50 border border-slate-200 rounded-xl p-3 leading-relaxed">
+            <p className="mt-2 rounded-lg border border-line bg-panel p-2.5 text-[10.5px] leading-relaxed text-ink">
               {isIOS ? (
                 <>
-                  On iPhone/iPad Safari: tap <strong>Share</strong> →{' '}
-                  <strong>Add to Home Screen</strong>.
+                  In Safari: tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.
                 </>
               ) : (
                 <>
-                  On Android Chrome: open the browser menu (<strong>⋮</strong>) in the top right
-                  and tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.
+                  In Chrome: open the <strong>⋮</strong> menu and tap{' '}
+                  <strong>Install app</strong> or <strong>Add to Home screen</strong>.
                 </>
               )}
             </p>
@@ -141,30 +141,30 @@ export function AndroidInstallCard() {
         </div>
       </div>
 
-      <div className="shrink-0">
+      <div className="shrink-0 sm:pl-3">
         {isInstalled ? (
-          <span className="min-h-[44px] px-4 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs font-semibold inline-flex items-center gap-1.5 whitespace-nowrap">
-            <Check className="w-4 h-4 text-emerald-700" aria-hidden="true" />
-            <span>Installed App</span>
+          <span className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-pistachio-tint px-3 text-[11px] font-bold text-pistachio">
+            <Check className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Installed</span>
           </span>
         ) : isInstallable ? (
           <button
             type="button"
             onClick={install}
-            className="min-h-[44px] px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-sm font-semibold inline-flex items-center gap-2 whitespace-nowrap"
+            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-berry px-3 text-[11px] font-bold text-white transition-colors hover:bg-berry-deep"
           >
-            <Download className="w-4 h-4" aria-hidden="true" />
-            <span>Install Android App</span>
+            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>Install app</span>
           </button>
         ) : (
           <button
             type="button"
             onClick={() => setShowManualSteps((v) => !v)}
             aria-expanded={showManualSteps}
-            className="min-h-[44px] px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-900 text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap"
+            className={`${btnGhost} h-9 text-[11px]`}
           >
-            <Smartphone className="w-4 h-4" aria-hidden="true" />
-            <span>{showManualSteps ? 'Hide Install Steps' : 'How to Install on Android'}</span>
+            <Smartphone className="h-3.5 w-3.5" aria-hidden="true" />
+            <span>{showManualSteps ? 'Hide steps' : 'Install steps'}</span>
           </button>
         )}
       </div>
