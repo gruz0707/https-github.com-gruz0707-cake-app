@@ -14,12 +14,16 @@ import { ReceiptPreviewModal } from './components/ReceiptPreviewModal';
 import { RevenueDashboardView } from './components/RevenueDashboardView';
 import { TopNav } from './components/TopNav';
 import { usePosStore } from './hooks/usePosStore';
+import { getNativeDeviceInfo } from './services/nativePrinter';
 import type { ActiveTab, BillOrder } from './types/pos';
 import {
   evaluateLicense,
+  getAppBuildTimeMs,
+  getHighWatermarkMs,
   loadOrInitLicenseState,
   saveLicenseState,
   verifyLicenseKey,
+  type VerifiedKeyPayload,
 } from './utils/licensing';
 import { createMemoryStorage, getBrowserStorage } from './utils/storage';
 
@@ -31,19 +35,52 @@ export default function App() {
   const [licenseState, setLicenseState] = useState(() =>
     loadOrInitLicenseState(licenseStorage),
   );
+  const [verifiedKey, setVerifiedKey] = useState<VerifiedKeyPayload | null>(null);
   const [nowTick, setNowTick] = useState(() => Date.now());
   const [licenseModalOpen, setLicenseModalOpen] = useState(false);
+
+  // Reconcile native Android device fingerprint & install time on launch
+  useEffect(() => {
+    let active = true;
+    void getNativeDeviceInfo().then((info) => {
+      if (!active) return;
+      if (info.androidId || info.firstInstallTime) {
+        setLicenseState(loadOrInitLicenseState(licenseStorage, new Date(), info));
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [licenseStorage]);
+
+  // Verify any stored license key asynchronously using ECDSA P-256 public key
+  useEffect(() => {
+    let active = true;
+    const key = licenseState.licenseKey;
+    if (!key) {
+      setVerifiedKey(null);
+      return;
+    }
+    void verifyLicenseKey(key, licenseState.deviceId).then((res) => {
+      if (active) setVerifiedKey(res);
+    });
+    return () => {
+      active = false;
+    };
+  }, [licenseState.licenseKey, licenseState.deviceId]);
 
   useEffect(() => {
     const id = setInterval(() => {
       const now = new Date();
       setNowTick(now.getTime());
       setLicenseState((prev) => {
+        if (prev.tampered) return prev;
         const lastMs = Date.parse(prev.lastSeenAt);
         if (Number.isFinite(lastMs) && now.getTime() > lastMs) {
-          const updated = { ...prev, lastSeenAt: now.toISOString() };
-          saveLicenseState(licenseStorage, updated);
-          return updated;
+          return saveLicenseState(licenseStorage, {
+            ...prev,
+            lastSeenAt: now.toISOString(),
+          });
         }
         return prev;
       });
@@ -51,29 +88,77 @@ export default function App() {
     return () => clearInterval(id);
   }, [licenseStorage]);
 
-  const licenseEval = useMemo(
-    () => evaluateLicense(licenseState, store.orders, new Date(nowTick)),
-    [licenseState, store.orders, nowTick],
+  const { evaluation: licenseEval, newlyExpiredKey } = useMemo(
+    () => evaluateLicense(licenseState, store.orders, verifiedKey, new Date(nowTick)),
+    [licenseState, store.orders, verifiedKey, nowTick],
   );
-  const licenseLocked =
-    licenseEval.status === 'expired' || licenseEval.status === 'clock_tampered';
 
-  const handleActivateLicense = (rawKey: string): { ok: boolean; error?: string } => {
-    const check = verifyLicenseKey(rawKey, licenseState.deviceId);
+  // Permanently blacklist expired timed keys so they can never be replayed
+  useEffect(() => {
+    if (!newlyExpiredKey) return;
+    setLicenseState((prev) => {
+      if (prev.expiredKeys.includes(newlyExpiredKey) && prev.licenseKey === null) return prev;
+      const nextExpired = prev.expiredKeys.includes(newlyExpiredKey)
+        ? prev.expiredKeys
+        : [...prev.expiredKeys, newlyExpiredKey];
+      return saveLicenseState(licenseStorage, {
+        ...prev,
+        licenseKey: null,
+        expiredKeys: nextExpired,
+      });
+    });
+  }, [newlyExpiredKey, licenseStorage]);
+
+  const licenseLocked =
+    licenseEval.status === 'expired' ||
+    licenseEval.status === 'clock_tampered' ||
+    licenseEval.status === 'tampered';
+
+  const handleActivateLicense = async (
+    rawKey: string,
+  ): Promise<{ ok: boolean; error?: string }> => {
+    const cleanKey = rawKey.trim();
+    if (licenseEval.status === 'clock_tampered') {
+      return {
+        ok: false,
+        error: 'Restore your device date & time to automatic before activating.',
+      };
+    }
+    if (licenseState.expiredKeys.includes(cleanKey)) {
+      return {
+        ok: false,
+        error: 'This license key has already expired and cannot be reused.',
+      };
+    }
+    const check = await verifyLicenseKey(cleanKey, licenseState.deviceId);
     if (!check.valid) {
       return { ok: false, error: check.error };
     }
-    if (check.expiresAt && Date.now() > check.expiresAt.getTime()) {
+    const nowMs = Date.now();
+    const watermarkMs = getHighWatermarkMs(licenseState, store.orders, getAppBuildTimeMs());
+    const effectiveNowMs = Math.max(nowMs, watermarkMs);
+    if (check.expiresAt && effectiveNowMs > check.expiresAt.getTime()) {
+      const nextExpired = licenseState.expiredKeys.includes(cleanKey)
+        ? licenseState.expiredKeys
+        : [...licenseState.expiredKeys, cleanKey];
+      setLicenseState(
+        saveLicenseState(licenseStorage, {
+          ...licenseState,
+          expiredKeys: nextExpired,
+        }),
+      );
       return { ok: false, error: 'This activation key has already expired.' };
     }
-    const nowIso = new Date().toISOString();
-    const updated = {
-      ...licenseState,
-      licenseKey: rawKey.trim().toUpperCase(),
-      activatedAt: nowIso,
-      lastSeenAt: nowIso,
-    };
-    saveLicenseState(licenseStorage, updated);
+    const nextLastSeenIso = new Date(Math.max(effectiveNowMs, nowMs)).toISOString();
+    const updated = saveLicenseState(licenseStorage, {
+      deviceId: licenseState.deviceId,
+      firstSeenAt: licenseState.firstSeenAt,
+      lastSeenAt: nextLastSeenIso,
+      licenseKey: cleanKey,
+      activatedAt: new Date(nowMs).toISOString(),
+      expiredKeys: licenseState.expiredKeys,
+    });
+    setVerifiedKey(check);
     setLicenseState(updated);
     setLicenseModalOpen(false);
     return { ok: true };
@@ -87,6 +172,21 @@ export default function App() {
     // Saves durably first, then sends the receipt. No compulsory preview.
     await store.checkoutAndPrint();
   };
+
+  if (licenseLocked) {
+    return (
+      <div className="min-h-screen bg-cream text-ink">
+        <LicenseGateModal
+          evaluation={licenseEval}
+          locked
+          onActivate={handleActivateLicense}
+          onExportBackup={() => {
+            void store.exportBackupJson();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-cream text-ink">

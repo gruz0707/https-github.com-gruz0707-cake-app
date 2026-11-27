@@ -131,6 +131,30 @@ public class ThermalPrinterPlugin extends Plugin {
     // ----- Adapter / scanning ---------------------------------------------
 
     @PluginMethod
+    public void getDeviceInfo(PluginCall call) {
+        JSObject ret = new JSObject();
+        try {
+            String androidId = Settings.Secure.getString(
+                getContext().getContentResolver(),
+                Settings.Secure.ANDROID_ID
+            );
+            if (androidId != null) ret.put("androidId", androidId);
+        } catch (Exception ignored) {
+            // Best effort.
+        }
+        try {
+            long firstInstall = getContext()
+                .getPackageManager()
+                .getPackageInfo(getContext().getPackageName(), 0)
+                .firstInstallTime;
+            ret.put("firstInstallTime", firstInstall);
+        } catch (Exception ignored) {
+            // Best effort.
+        }
+        call.resolve(ret);
+    }
+
+    @PluginMethod
     public void isSupported(PluginCall call) {
         BluetoothAdapter a = getAdapter();
         JSObject ret = new JSObject();

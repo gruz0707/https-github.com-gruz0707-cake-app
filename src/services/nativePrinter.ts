@@ -33,6 +33,7 @@ export interface NativePrinterPlugin {
   write(options: { base64: string }): Promise<NativeWriteResult>;
   disconnect(): Promise<void>;
   openBluetoothSettings(): Promise<void>;
+  getDeviceInfo(): Promise<{ androidId?: string; firstInstallTime?: number }>;
 }
 
 const ThermalPrinter = registerPlugin<NativePrinterPlugin>('ThermalPrinter');
@@ -132,4 +133,16 @@ export async function disconnectNativePrinter(): Promise<void> {
 
 export async function openNativeBluetoothSettings(): Promise<void> {
   await ThermalPrinter.openBluetoothSettings();
+}
+
+export async function getNativeDeviceInfo(): Promise<{
+  androidId?: string;
+  firstInstallTime?: number;
+}> {
+  if (!isNativePrinterAvailable()) return {};
+  try {
+    return await ThermalPrinter.getDeviceInfo();
+  } catch {
+    return {};
+  }
 }

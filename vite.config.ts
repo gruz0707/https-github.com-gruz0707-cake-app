@@ -6,6 +6,9 @@ import {VitePWA} from 'vite-plugin-pwa';
 
 export default defineConfig(() => {
   return {
+    define: {
+      __APP_BUILD_TIME__: JSON.stringify(Date.now()),
+    },
     plugins: [
       react(),
       tailwindcss(),

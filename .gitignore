@@ -7,3 +7,4 @@ coverage/
 .env*
 !.env.example
 scratch/
+scripts/ubsc-private-key.json

@@ -1,12 +1,22 @@
 import { useState, type FormEvent } from 'react';
-import { Check, Copy, Download, KeyRound, Lock, MessageCircle, ShieldAlert, X } from 'lucide-react';
+import {
+  Check,
+  ClipboardPaste,
+  Copy,
+  Download,
+  KeyRound,
+  Lock,
+  MessageCircle,
+  ShieldAlert,
+  X,
+} from 'lucide-react';
 import type { LicenseEvaluation } from '../utils/licensing';
-import { btnGhost, btnPrimary, fieldLabel, focus, input } from '../ui';
+import { btnGhost, btnPrimary, focus, input } from '../ui';
 
 interface LicenseGateModalProps {
   evaluation: LicenseEvaluation;
   locked: boolean;
-  onActivate: (key: string) => { ok: boolean; error?: string };
+  onActivate: (key: string) => Promise<{ ok: boolean; error?: string }>;
   onExportBackup: () => void;
   onClose?: () => void;
 }
@@ -20,6 +30,7 @@ export function LicenseGateModal({
 }: LicenseGateModalProps) {
   const [keyInput, setKeyInput] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
   const handleCopyDevice = async () => {
@@ -32,10 +43,24 @@ export function LicenseGateModal({
     }
   };
 
-  const handleSubmit = (e: FormEvent) => {
+  const handlePasteKey = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setKeyInput(text.trim());
+        setError(null);
+      }
+    } catch {
+      setError('Clipboard paste is not permitted; please paste manually into the box.');
+    }
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError(null);
-    const res = onActivate(keyInput);
+    setBusy(true);
+    const res = await onActivate(keyInput);
+    setBusy(false);
     if (!res.ok) {
       setError(res.error ?? 'Invalid activation key.');
     }
@@ -53,12 +78,15 @@ export function LicenseGateModal({
       })
     : null;
 
+  const isClockTampered = evaluation.status === 'clock_tampered';
+  const isStorageTampered = evaluation.status === 'tampered';
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="license-gate-title"
-      className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/70 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-ink/75 p-4 backdrop-blur-sm"
       onClick={!locked && onClose ? onClose : undefined}
     >
       <div
@@ -69,14 +97,14 @@ export function LicenseGateModal({
           <div className="flex items-center gap-3">
             <span
               className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${
-                evaluation.status === 'clock_tampered'
+                isClockTampered || isStorageTampered
                   ? 'bg-berry-tint text-berry-deep'
                   : locked
                     ? 'bg-caramel-tint text-caramel'
                     : 'bg-berry-tint text-berry'
               }`}
             >
-              {evaluation.status === 'clock_tampered' ? (
+              {isClockTampered || isStorageTampered ? (
                 <ShieldAlert className="h-5 w-5" aria-hidden="true" />
               ) : locked ? (
                 <Lock className="h-5 w-5" aria-hidden="true" />
@@ -86,16 +114,18 @@ export function LicenseGateModal({
             </span>
             <div>
               <h2 id="license-gate-title" className="text-base font-extrabold text-ink">
-                {evaluation.status === 'clock_tampered'
+                {isClockTampered
                   ? 'Device Clock Changed'
-                  : locked
-                    ? 'Trial Ended — Activate POS'
-                    : 'Activate Esai Cakes POS'}
+                  : isStorageTampered
+                    ? 'License Verification Failed'
+                    : locked
+                      ? 'Trial Ended — Activate POS'
+                      : 'Activate Esai Cakes POS'}
               </h2>
               <p className="mt-0.5 text-[11px] text-muted">
                 {evaluation.status === 'trial' && expiryText
                   ? `${evaluation.daysLeft} ${evaluation.daysLeft === 1 ? 'day' : 'days'} left in trial (ends ${expiryText})`
-                  : 'Enter your UBSC Software license key to continue'}
+                  : 'Enter a valid UBSC Software license key to continue'}
               </p>
             </div>
           </div>
@@ -146,27 +176,36 @@ export function LicenseGateModal({
               </button>
             </div>
             <p className="mt-1.5 text-[10.5px] text-muted">
-              Send this Device Code to get your activation key.
+              Send this Device Code to get your signed activation key.
             </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div>
-              <label htmlFor="license-key-input" className={fieldLabel}>
-                Activation Key
-              </label>
+              <div className="mb-1.5 flex items-center justify-between gap-2">
+                <label htmlFor="license-key-input" className="text-[11px] font-semibold text-muted">
+                  Activation Key
+                </label>
+                <button
+                  type="button"
+                  onClick={handlePasteKey}
+                  className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10.5px] font-semibold text-berry hover:bg-berry-tint"
+                >
+                  <ClipboardPaste className="h-3 w-3" aria-hidden="true" />
+                  <span>Paste Key</span>
+                </button>
+              </div>
               <input
                 id="license-key-input"
                 type="text"
                 value={keyInput}
                 onChange={(e) => {
-                  setKeyInput(e.target.value.toUpperCase());
+                  setKeyInput(e.target.value);
                   setError(null);
                 }}
-                placeholder="ESAI-30D-261227-XXXXXX"
-                autoCapitalize="characters"
+                placeholder="ESAI-30D-261227-..."
                 spellCheck={false}
-                className={`${input} font-mono uppercase tracking-wide`}
+                className={`${input} font-mono text-xs tracking-wide`}
               />
               {error && (
                 <p role="alert" className="mt-1.5 text-xs font-medium text-berry-deep">
@@ -175,9 +214,9 @@ export function LicenseGateModal({
               )}
             </div>
 
-            <button type="submit" className={`${btnPrimary} w-full`}>
+            <button type="submit" disabled={busy} className={`${btnPrimary} w-full`}>
               <KeyRound className="h-4 w-4" aria-hidden="true" />
-              <span>Activate License</span>
+              <span>{busy ? 'Verifying…' : 'Activate License'}</span>
             </button>
           </form>
 
@@ -198,7 +237,7 @@ export function LicenseGateModal({
           </div>
 
           <p className="text-center text-[10px] text-muted">
-            Licensed by UBSC Software · Works 100% offline
+            Cryptographically signed by UBSC Software · Works 100% offline
           </p>
         </div>
       </div>
