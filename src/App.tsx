@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
-import { AlertTriangle, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, KeyRound, X } from 'lucide-react';
 import { BillsHistoryView } from './components/BillsHistoryView';
 import { BottomTabBar } from './components/BottomTabBar';
 import { CakeCatalogView } from './components/CakeCatalogView';
 import { CheckoutNotice } from './components/CheckoutNotice';
 import { DataBackupView } from './components/DataBackupView';
+import { LicenseGateModal } from './components/LicenseGateModal';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { PosCounterView } from './components/PosCounterView';
 import { PrinterSettingsView } from './components/PrinterSettingsView';
@@ -14,11 +15,69 @@ import { RevenueDashboardView } from './components/RevenueDashboardView';
 import { TopNav } from './components/TopNav';
 import { usePosStore } from './hooks/usePosStore';
 import type { ActiveTab, BillOrder } from './types/pos';
+import {
+  evaluateLicense,
+  loadOrInitLicenseState,
+  saveLicenseState,
+  verifyLicenseKey,
+} from './utils/licensing';
+import { createMemoryStorage, getBrowserStorage } from './utils/storage';
 
 export default function App() {
   const store = usePosStore();
   const [activeTab, setActiveTab] = useState<ActiveTab>('pos');
   const [activeReceiptOrder, setActiveReceiptOrder] = useState<BillOrder | null>(null);
+  const [licenseStorage] = useState(() => getBrowserStorage() ?? createMemoryStorage());
+  const [licenseState, setLicenseState] = useState(() =>
+    loadOrInitLicenseState(licenseStorage),
+  );
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  const [licenseModalOpen, setLicenseModalOpen] = useState(false);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const now = new Date();
+      setNowTick(now.getTime());
+      setLicenseState((prev) => {
+        const lastMs = Date.parse(prev.lastSeenAt);
+        if (Number.isFinite(lastMs) && now.getTime() > lastMs) {
+          const updated = { ...prev, lastSeenAt: now.toISOString() };
+          saveLicenseState(licenseStorage, updated);
+          return updated;
+        }
+        return prev;
+      });
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [licenseStorage]);
+
+  const licenseEval = useMemo(
+    () => evaluateLicense(licenseState, store.orders, new Date(nowTick)),
+    [licenseState, store.orders, nowTick],
+  );
+  const licenseLocked =
+    licenseEval.status === 'expired' || licenseEval.status === 'clock_tampered';
+
+  const handleActivateLicense = (rawKey: string): { ok: boolean; error?: string } => {
+    const check = verifyLicenseKey(rawKey, licenseState.deviceId);
+    if (!check.valid) {
+      return { ok: false, error: check.error };
+    }
+    if (check.expiresAt && Date.now() > check.expiresAt.getTime()) {
+      return { ok: false, error: 'This activation key has already expired.' };
+    }
+    const nowIso = new Date().toISOString();
+    const updated = {
+      ...licenseState,
+      licenseKey: rawKey.trim().toUpperCase(),
+      activatedAt: nowIso,
+      lastSeenAt: nowIso,
+    };
+    saveLicenseState(licenseStorage, updated);
+    setLicenseState(updated);
+    setLicenseModalOpen(false);
+    return { ok: true };
+  };
 
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -38,6 +97,25 @@ export default function App() {
         printer={store.printer}
         onOpenPrinterTab={() => setActiveTab('printer')}
       />
+
+      {licenseEval.status === 'trial' && (
+        <div className="border-b border-caramel/25 bg-caramel-tint text-caramel">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-1.5 sm:px-6">
+            <p className="text-[11px] font-semibold">
+              Trial mode · {licenseEval.daysLeft}{' '}
+              {licenseEval.daysLeft === 1 ? 'day' : 'days'} left
+            </p>
+            <button
+              type="button"
+              onClick={() => setLicenseModalOpen(true)}
+              className="inline-flex items-center gap-1 rounded-md bg-white/80 px-2.5 py-0.5 text-[10.5px] font-bold text-ink shadow-xs hover:bg-white"
+            >
+              <KeyRound className="h-3 w-3 text-berry" aria-hidden="true" />
+              <span>Activate</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {store.storageError && (
         <div role="alert" className="border-b border-berry/25 bg-berry-tint text-berry-deep">
@@ -177,6 +255,17 @@ export default function App() {
             setActiveReceiptOrder(null);
             setActiveTab('printer');
           }}
+        />
+      )}
+      {(licenseLocked || licenseModalOpen) && (
+        <LicenseGateModal
+          evaluation={licenseEval}
+          locked={licenseLocked}
+          onActivate={handleActivateLicense}
+          onExportBackup={() => {
+            void store.exportBackupJson();
+          }}
+          onClose={licenseLocked ? undefined : () => setLicenseModalOpen(false)}
         />
       )}
     </div>
