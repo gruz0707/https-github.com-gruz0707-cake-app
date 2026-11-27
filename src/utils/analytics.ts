@@ -1,5 +1,5 @@
 import type { BillOrder, PaymentMethod } from '../types/pos';
-import { orderStatus } from './orders';
+import { orderAdvance, orderBalance, orderStatus } from './orders';
 import { roundMoney } from './billing';
 
 export interface DailyRevenuePoint {
@@ -178,7 +178,37 @@ export function computeRevenueOverview(
   };
 }
 
-export function buildPaymentBreakdown(orders: BillOrder[]): PaymentBreakdownRow[] {
+export type AnalyticsScope = 'today' | 'month' | 'all';
+
+export interface TopCakeRow {
+  cakeName: string;
+  quantity: number;
+  revenue: number;
+}
+
+export interface PendingOrdersSummary {
+  count: number;
+  advancePaid: number;
+  balanceDue: number;
+}
+
+function matchesScope(
+  createdAt: string,
+  scope: AnalyticsScope,
+  referenceDate: Date,
+): boolean {
+  if (scope === 'all') return true;
+  const dt = new Date(createdAt);
+  if (Number.isNaN(dt.getTime())) return false;
+  if (scope === 'today') return toLocalDateKey(dt) === toLocalDateKey(referenceDate);
+  return toLocalMonthKey(dt) === toLocalMonthKey(referenceDate);
+}
+
+export function buildPaymentBreakdown(
+  orders: BillOrder[],
+  scope: AnalyticsScope = 'all',
+  referenceDate = new Date(),
+): PaymentBreakdownRow[] {
   const methods: PaymentMethod[] = ['UPI', 'Cash', 'Card'];
   const totals = new Map<PaymentMethod, { revenue: number; ordersCount: number }>();
   for (const m of methods) {
@@ -188,6 +218,7 @@ export function buildPaymentBreakdown(orders: BillOrder[]): PaymentBreakdownRow[
   let grandTotal = 0;
   for (const order of orders) {
     if (order.isDemo || orderStatus(order) !== 'completed') continue;
+    if (!matchesScope(order.createdAt, scope, referenceDate)) continue;
     const bucket = totals.get(order.paymentMethod) ?? { revenue: 0, ordersCount: 0 };
     bucket.revenue = roundMoney(bucket.revenue + order.total);
     bucket.ordersCount += 1;
@@ -206,4 +237,54 @@ export function buildPaymentBreakdown(orders: BillOrder[]): PaymentBreakdownRow[
       sharePercent,
     };
   });
+}
+
+export function computePendingOrdersSummary(orders: BillOrder[]): PendingOrdersSummary {
+  let count = 0;
+  let advancePaid = 0;
+  let balanceDue = 0;
+
+  for (const order of orders) {
+    if (order.isDemo) continue;
+    const status = orderStatus(order);
+    if (status === 'scheduled' || status === 'baking' || status === 'ready') {
+      count += 1;
+      advancePaid = roundMoney(advancePaid + orderAdvance(order));
+      balanceDue = roundMoney(balanceDue + orderBalance(order));
+    }
+  }
+
+  return { count, advancePaid, balanceDue };
+}
+
+export function computeTopCakes(
+  orders: BillOrder[],
+  scope: AnalyticsScope = 'all',
+  limit = 5,
+  referenceDate = new Date(),
+): TopCakeRow[] {
+  const map = new Map<string, { quantity: number; revenue: number }>();
+
+  for (const order of orders) {
+    if (order.isDemo || orderStatus(order) !== 'completed') continue;
+    if (!matchesScope(order.createdAt, scope, referenceDate)) continue;
+    for (const item of order.items) {
+      const name = item.cakeName.trim();
+      if (!name) continue;
+      const prev = map.get(name) ?? { quantity: 0, revenue: 0 };
+      map.set(name, {
+        quantity: prev.quantity + item.quantity,
+        revenue: roundMoney(prev.revenue + item.unitPrice * item.quantity),
+      });
+    }
+  }
+
+  return [...map.entries()]
+    .map(([cakeName, stats]) => ({
+      cakeName,
+      quantity: stats.quantity,
+      revenue: stats.revenue,
+    }))
+    .sort((a, b) => b.quantity - a.quantity || b.revenue - a.revenue)
+    .slice(0, Math.max(1, limit));
 }

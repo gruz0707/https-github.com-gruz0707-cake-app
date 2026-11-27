@@ -4,7 +4,9 @@ import {
   buildDailyRevenueSeries,
   buildMonthlyRevenueSeries,
   buildPaymentBreakdown,
+  computePendingOrdersSummary,
   computeRevenueOverview,
+  computeTopCakes,
 } from './analytics';
 import type { BillOrder } from '../types/pos';
 
@@ -112,4 +114,49 @@ test('demo bills are kept in history but excluded from revenue KPIs', () => {
   const breakdown = buildPaymentBreakdown([real, demo]);
   assert.equal(breakdown.find((r) => r.method === 'UPI')?.revenue, 0);
   assert.equal(breakdown.find((r) => r.method === 'Cash')?.sharePercent, 100);
+});
+
+test('scoped payment breakdown, pending summary, and top cakes compute accurately', () => {
+  const ref = new Date(2026, 10, 17, 15, 0, 0);
+  const todayOrder: BillOrder = {
+    ...makeOrder('t-1', new Date(2026, 10, 17, 10, 0, 0).toISOString(), 1200, 'UPI'),
+    items: [
+      {
+        key: 'k1',
+        cakeId: 'c1',
+        cakeName: 'Black Forest Cake',
+        weightKg: 1,
+        weightLabel: '1 kg',
+        flavour: null,
+        eggless: false,
+        basePrice: 600,
+        flavourExtra: 0,
+        egglessExtra: 0,
+        unitPrice: 600,
+        quantity: 2,
+      },
+    ],
+  };
+  const olderOrder = makeOrder('m-1', new Date(2026, 10, 2, 10, 0, 0).toISOString(), 800, 'Cash');
+  const pendingOrder: BillOrder = {
+    ...makeOrder('p-1', new Date(2026, 10, 17, 12, 0, 0).toISOString(), 2000, 'UPI'),
+    status: 'scheduled',
+    advancePaid: 500,
+    balanceDue: 1500,
+  };
+
+  const todaySplit = buildPaymentBreakdown([todayOrder, olderOrder, pendingOrder], 'today', ref);
+  assert.equal(todaySplit.find((r) => r.method === 'UPI')?.revenue, 1200);
+  assert.equal(todaySplit.find((r) => r.method === 'Cash')?.revenue, 0);
+
+  const pending = computePendingOrdersSummary([todayOrder, olderOrder, pendingOrder]);
+  assert.equal(pending.count, 1);
+  assert.equal(pending.advancePaid, 500);
+  assert.equal(pending.balanceDue, 1500);
+
+  const top = computeTopCakes([todayOrder, olderOrder, pendingOrder], 'today', 5, ref);
+  assert.equal(top.length, 1);
+  assert.equal(top[0].cakeName, 'Black Forest Cake');
+  assert.equal(top[0].quantity, 2);
+  assert.equal(top[0].revenue, 1200);
 });
